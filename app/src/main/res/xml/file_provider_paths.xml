@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Expose external storage for sending files -->
+    <external-path name="external_files" path="." />
+    
+    <!-- Expose the app's specific external files directory -->
+    <external-files-path name="app_external_files" path="." />
+    
+    <!-- Expose the app's cache directory -->
+    <cache-path name="app_cache" path="." />
+    
+    <!-- Expose the downloads directory where we receive files -->
+    <external-path name="downloads" path="Download/SwiftShare" />
+</paths>
