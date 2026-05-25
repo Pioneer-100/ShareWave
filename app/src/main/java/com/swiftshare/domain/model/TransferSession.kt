@@ -16,7 +16,7 @@ data class TransferSession(
     val direction: TransferDirection,
     val files: List<FileItem>,
     val channel: TransportChannel,
-    val state: TransferSessionState = TransferSessionState.AWAITING_PIN,
+    val state: TransferSessionState = TransferSessionState.AwaitingPin,
     val createdAtMs: Long = System.currentTimeMillis(),
 ) {
     companion object {

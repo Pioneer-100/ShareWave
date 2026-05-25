@@ -1,15 +1,17 @@
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+
 $gradleVersion = "8.7"
 $gradleZip = "gradle-$gradleVersion-bin.zip"
 $downloadUrl = "https://services.gradle.org/distributions/$gradleZip"
-$tempDir = Join-Path $env:TEMP "gradle_setup"
+$tempDir = Join-Path $env:TEMP "gradle_setup_fast"
 
 if (!(Test-Path $tempDir)) {
     New-Item -ItemType Directory -Path $tempDir | Out-Null
 }
 
 $zipPath = Join-Path $tempDir $gradleZip
-Write-Host "Downloading Gradle $gradleVersion..."
+Write-Host "Downloading Gradle $gradleVersion (Fast Mode)..."
 Invoke-WebRequest -Uri $downloadUrl -OutFile $zipPath
 
 Write-Host "Extracting Gradle..."
