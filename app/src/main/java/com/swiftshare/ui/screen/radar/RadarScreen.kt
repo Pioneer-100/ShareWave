@@ -1,9 +1,12 @@
 package com.swiftshare.ui.screen.radar
 
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,6 +24,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -101,12 +105,43 @@ fun RadarScreen(
                 onDeviceTapped = onDeviceSelected,
             )
 
-            // Center dot (this device)
+            // Dynamic pulsing center halo
+            val infiniteTransition = rememberInfiniteTransition(label = "centerPulse")
+            val centerPulse by infiniteTransition.animateFloat(
+                initialValue = 16.dp.value,
+                targetValue = 36.dp.value,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 1800, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Restart,
+                ),
+                label = "centerPulse"
+            )
             Box(
                 modifier = Modifier
-                    .size(16.dp)
+                    .size(centerPulse.dp)
                     .clip(CircleShape)
-                    .background(PrimaryCyan),
+                    .background(PrimaryCyan.copy(alpha = (1f - (centerPulse - 16) / 20).coerceIn(0f, 1f) * 0.3f)),
+            )
+
+            // Inner glowing ring
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .clip(CircleShape)
+                    .background(PrimaryCyan.copy(alpha = 0.15f)),
+            )
+
+            // Center dot (this device) with radial gradient
+            Box(
+                modifier = Modifier
+                    .size(14.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(NeutralWhite, PrimaryCyan),
+                            radius = 25f
+                        )
+                    ),
             )
         }
 
@@ -137,8 +172,9 @@ private fun RadarCanvas(
     isScanning: Boolean,
     onDeviceTapped: (NearbyDevice) -> Unit,
 ) {
-    // Sweep rotation animation
     val infiniteTransition = rememberInfiniteTransition(label = "radar")
+    
+    // Sweep rotation animation
     val sweepAngle by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
@@ -149,157 +185,312 @@ private fun RadarCanvas(
         label = "sweep",
     )
 
-    // Pulse animation for rings
-    val pulseAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.08f,
-        targetValue = 0.25f,
+    // Three phase-shifted wave ripples expanding outward
+    val waveProgress1 by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1500, easing = FastOutSlowInEasing),
+            animation = tween(durationMillis = 4000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "wave1"
+    )
+    val waveProgress2 by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 4000, delayMillis = 1333, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "wave2"
+    )
+    val waveProgress3 by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 4000, delayMillis = 2666, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "wave3"
+    )
+
+    // Breathing glow animation for discovered device dots
+    val breathingScale by infiniteTransition.animateFloat(
+        initialValue = 0.7f,
+        targetValue = 1.3f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2000, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse,
         ),
-        label = "pulse",
+        label = "breathing"
     )
 
     Canvas(modifier = Modifier.fillMaxSize()) {
         val center = Offset(size.width / 2f, size.height / 2f)
         val maxRadius = size.minDimension / 2f
 
-        // Draw concentric rings
-        val ringCount = 4
-        for (i in 1..ringCount) {
-            val radius = maxRadius * i / ringCount
+        // 1. Draw tech mesh grid dots
+        val gridSize = 24.dp.toPx()
+        val cols = (size.width / gridSize).toInt()
+        val rows = (size.height / gridSize).toInt()
+        for (col in 0..cols) {
+            for (row in 0..rows) {
+                val ptX = col * gridSize
+                val ptY = row * gridSize
+                val dist = Offset(ptX, ptY).minus(center).getDistance()
+                if (dist < maxRadius) {
+                    drawCircle(
+                        color = RadarMeshColor,
+                        radius = 1.5f,
+                        center = Offset(ptX, ptY),
+                    )
+                }
+            }
+        }
+
+        // 2. Draw static target faint circles
+        val targetRings = 3
+        for (i in 1..targetRings) {
+            val radius = maxRadius * i / targetRings
             drawCircle(
-                color = RadarRingColor.copy(alpha = pulseAlpha * (1f - i * 0.15f)),
+                color = RadarRingColor.copy(alpha = 0.05f),
                 radius = radius,
                 center = center,
-                style = Stroke(width = 1.5f),
+                style = Stroke(width = 1f),
             )
         }
 
-        // Draw cross-hairs
+        // 3. Draw cross-hairs
         drawLine(
-            color = RadarRingColor,
+            color = RadarRingColor.copy(alpha = 0.1f),
             start = Offset(center.x, center.y - maxRadius),
             end = Offset(center.x, center.y + maxRadius),
             strokeWidth = 0.8f,
         )
         drawLine(
-            color = RadarRingColor,
+            color = RadarRingColor.copy(alpha = 0.1f),
             start = Offset(center.x - maxRadius, center.y),
             end = Offset(center.x + maxRadius, center.y),
             strokeWidth = 0.8f,
         )
 
-        // Draw sweep line
+        // 4. Draw multi-layered expanding wave ripples
         if (isScanning) {
-            rotate(sweepAngle, pivot = center) {
-                drawLine(
-                    brush = Brush.linearGradient(
-                        colors = listOf(Color.Transparent, RadarSweepColor),
-                        start = center,
-                        end = Offset(center.x, center.y - maxRadius),
-                    ),
-                    start = center,
-                    end = Offset(center.x, center.y - maxRadius),
-                    strokeWidth = 2.5f,
-                    cap = StrokeCap.Round,
-                )
-
-                // Sweep trail (fading arc)
-                drawArc(
-                    brush = Brush.sweepGradient(
-                        0f to Color.Transparent,
-                        0.15f to RadarSweepColor.copy(alpha = 0.15f),
-                        0.25f to Color.Transparent,
-                    ),
-                    startAngle = -90f,
-                    sweepAngle = -60f,
-                    useCenter = true,
-                    size = size,
+            listOf(waveProgress1, waveProgress2, waveProgress3).forEach { progress ->
+                val radius = maxRadius * progress
+                val alpha = (1f - progress).coerceIn(0f, 1f) * 0.22f
+                drawCircle(
+                    color = PrimaryCyan.copy(alpha = alpha),
+                    radius = radius,
+                    center = center,
+                    style = Stroke(width = 2f),
                 )
             }
         }
 
-        // Draw device dots
+        // 5. Draw sweep line and trail
+        if (isScanning) {
+            rotate(sweepAngle, pivot = center) {
+                // Fading wide sweep trail (arc of 90 degrees behind the line)
+                drawArc(
+                    brush = Brush.sweepGradient(
+                        0f to Color.Transparent,
+                        0.6f to Color.Transparent,
+                        0.8f to RadarSweepColor.copy(alpha = 0.05f),
+                        1f to RadarSweepColor.copy(alpha = 0.35f),
+                    ),
+                    startAngle = -90f,
+                    sweepAngle = -90f,
+                    useCenter = true,
+                    size = size,
+                )
+
+                // Neon glowing sweep leading-edge line
+                drawLine(
+                    color = PrimaryCyan.copy(alpha = 0.3f),
+                    start = center,
+                    end = Offset(center.x, center.y - maxRadius),
+                    strokeWidth = 6f,
+                    cap = StrokeCap.Round,
+                )
+                drawLine(
+                    color = NeutralWhite,
+                    start = center,
+                    end = Offset(center.x, center.y - maxRadius),
+                    strokeWidth = 2f,
+                    cap = StrokeCap.Round,
+                )
+            }
+        }
+
+        // 6. Draw device dots with premium light reflections & pulsating beacon halos
         devices.forEachIndexed { index, device ->
             val angle = (index * 137.5f) * (Math.PI / 180f) // golden angle distribution
             val distance = maxRadius * 0.3f + (maxRadius * 0.5f * (index % 3 + 1) / 4f)
             val dotX = center.x + (cos(angle) * distance).toFloat()
             val dotY = center.y + (sin(angle) * distance).toFloat()
 
-            // Glow
+            // Dynamic beacon breathing ring
+            val rippleRadius = 14f + (16f * (breathingScale - 0.7f) / 0.6f)
+            val rippleAlpha = (0.3f * (1.3f - breathingScale)).coerceIn(0f, 1f)
             drawCircle(
-                color = RadarDotGlow,
-                radius = 14f,
+                color = RadarDotGlow.copy(alpha = rippleAlpha),
+                radius = rippleRadius,
                 center = Offset(dotX, dotY),
             )
-            // Dot
+
+            // Neon static glow
+            drawCircle(
+                color = RadarDotGlow,
+                radius = 12f,
+                center = Offset(dotX, dotY),
+            )
+
+            // Inner primary dot
             drawCircle(
                 color = RadarDotColor,
-                radius = 8f,
+                radius = 7f,
                 center = Offset(dotX, dotY),
+            )
+
+            // High-fidelity light reflection specular dot (top-left)
+            drawCircle(
+                color = NeutralWhite,
+                radius = 2.5f,
+                center = Offset(dotX - 2f, dotY - 2f),
             )
         }
     }
 }
 
-// ──────────────────────── Device list item ────────────────────────
+// ──────────────────────── Device list item (Glassmorphic) ────────────────────────
 
 @Composable
 private fun DeviceListItem(
     device: NearbyDevice,
     onClick: () -> Unit,
 ) {
-    Surface(
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    // Smooth tactile spring compression on tap
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.96f else 1.0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "scale"
+    )
+
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 1.dp,
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null, // Custom visual feedback without generic gray ripple
+                onClick = onClick
+            ),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isPressed) {
+                MaterialTheme.colorScheme.surface.copy(alpha = 0.75f)
+            } else {
+                MaterialTheme.colorScheme.surface.copy(alpha = 0.45f)
+            }
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            brush = Brush.linearGradient(
+                colors = listOf(
+                    GlassBorderStart,
+                    GlassBorderEnd
+                )
+            )
+        )
     ) {
         Row(
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            // Glowing circular avatar
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(44.dp)
                     .clip(CircleShape)
                     .background(
                         Brush.linearGradient(listOf(PrimaryAccent, PrimaryCyan))
                     ),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    text = device.name.take(1).uppercase(),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = NeutralWhite,
-                    fontWeight = FontWeight.Bold,
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(2.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.1f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = device.name.take(1).uppercase(),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = NeutralWhite,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
             }
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = device.name,
                     style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
-                Text(
-                    text = device.channel.displayName,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    // Small neon indicator for channel type (Green for Wi-Fi, Purple for other/BLE)
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (device.channel.displayName.lowercase().contains("wifi")) SecondaryGreen
+                                else SecondaryPurple
+                            )
+                    )
+                    Text(
+                        text = device.channel.displayName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
-            // Signal strength indicator
+            // Signal strength technical badge
             if (device.rssi != Int.MIN_VALUE) {
-                Text(
-                    text = "${device.rssi} dBm",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                    border = BorderStroke(0.5.dp, GlassBorderEnd)
+                ) {
+                    Text(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        text = "${device.rssi} dBm",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }

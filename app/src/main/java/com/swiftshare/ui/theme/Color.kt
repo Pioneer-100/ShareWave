@@ -40,3 +40,12 @@ val RadarRingColor     = PrimaryCyan.copy(alpha = 0.15f)
 val RadarSweepColor    = PrimaryCyan.copy(alpha = 0.35f)
 val RadarDotColor      = PrimaryCyan
 val RadarDotGlow       = PrimaryCyan.copy(alpha = 0.5f)
+
+// ─────────────────────── Glassmorphism & Neon Glow ──────────────────────────────────────────
+val GlassBorderStart   = Color(0x40FFFFFF)
+val GlassBorderEnd     = Color(0x10FFFFFF)
+val GlassBg            = Color(0x12FFFFFF)
+val NeonGlowCyan       = Color(0x3D00E5FF)
+val NeonGlowPurple     = Color(0x3DA78BFA)
+val RadarMeshColor     = Color(0x0D00E5FF)
+
